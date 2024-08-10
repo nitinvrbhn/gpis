@@ -47,6 +47,7 @@ enum GitChangeType
     UN_TRACKED
 };
 
+const string directoryPath = "./";
 const string all_character_string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 // GIT commands map
@@ -129,6 +130,19 @@ public:
         return tokens;
     }
 
+    static int getHcf(int value1, int value2)
+    {
+        if (value1 > value2)
+        {
+            value1 = value1 + value2;
+            value2 = value1 - value2;
+            value1 = value1 = value2;
+        }
+        if (value1 == 0)
+            return value2;
+        return Action::getHcf(value2 % value1, value1);
+    }
+
     // Merges two array and returns unique values
     template <typename Data>
     static vector<Data> mergeArray(const vector<Data> &firstArray, const vector<Data> &secondArray)
@@ -193,7 +207,6 @@ class FileWatch
 {
 private:
     unordered_map<string, filesystem::file_time_type> existingFileMap;
-    bool shouldWatch = false;
     string _folderPath;
     int _timeDelayInMS;
     function<void(vector<string> path)> _action;
@@ -209,79 +222,50 @@ private:
         }
     }
 
-    void watch()
-    {
-        vector<string> filePathList;
-        this_thread::sleep_for(chrono::milliseconds(_timeDelayInMS));
-        if (shouldWatch)
-        {
-            for (auto filePointer = existingFileMap.begin(); filePointer != existingFileMap.end();)
-            {
-                if (!filesystem::exists(filePointer->first))
-                {
-                    filePathList.push_back(filePointer->first);
-                    existingFileMap.erase(filePointer);
-                }
-                else
-                {
-                    filePointer++;
-                }
-            }
-            for (const auto &file : filesystem::recursive_directory_iterator(_folderPath))
-            {
-                filesystem::file_time_type lastUpdateTime = filesystem::last_write_time(file);
-                if (!pathExists(file.path()))
-                {
-                    filePathList.push_back(file.path());
-                    existingFileMap[file.path()] = lastUpdateTime;
-                }
-                else if (lastUpdateTime != existingFileMap[file.path()])
-                {
-                    filePathList.push_back(file.path());
-                    existingFileMap[file.path()] = lastUpdateTime;
-                }
-            }
-            if (filePathList.size() > 0)
-            {
-                _action(filePathList);
-            }
-            this_thread::sleep_for(chrono::milliseconds(_timeDelayInMS));
-            watch();
-        }
-    }
-
 public:
     FileWatch(string path, int timeDelayInMS, function<void(vector<string>)> action) : _action{action}, _folderPath{path}, _timeDelayInMS{timeDelayInMS}
     {
         loadFileMapToModifiedDate(_folderPath);
     }
 
-    void start()
+    void check()
     {
-        shouldWatch = true;
-        watch();
-    }
-
-    void stop()
-    {
-        shouldWatch = false;
+        vector<string> filePathList;
+        for (auto filePointer = existingFileMap.begin(); filePointer != existingFileMap.end();)
+        {
+            if (!filesystem::exists(filePointer->first))
+            {
+                filePathList.push_back(filePointer->first);
+                existingFileMap.erase(filePointer);
+            }
+            else
+            {
+                filePointer++;
+            }
+        }
+        for (const auto &file : filesystem::recursive_directory_iterator(_folderPath))
+        {
+            filesystem::file_time_type lastUpdateTime = filesystem::last_write_time(file);
+            if (!pathExists(file.path()))
+            {
+                filePathList.push_back(file.path());
+                existingFileMap[file.path()] = lastUpdateTime;
+            }
+            else if (lastUpdateTime != existingFileMap[file.path()])
+            {
+                filePathList.push_back(file.path());
+                existingFileMap[file.path()] = lastUpdateTime;
+            }
+        }
+        if (filePathList.size() > 0)
+        {
+            _action(filePathList);
+        }
     }
 };
 
 class GitHandler
 {
-private:
-    bool _continueSync = false;
-
-    void sync()
-    {
-        this_thread::sleep_for(chrono::seconds(1));
-        if (!_continueSync)
-            return;
-        pull();
-        startSync();
-    }
-
 public:
     vector<string> getFileWithChanges(GitChangeType type = GitChangeType::ALL)
     {
@@ -332,12 +316,6 @@ public:
         Action::exec(git_command[GitCommandHead::PULL]);
     }
 
-    void startSync()
-    {
-        _continueSync = true;
-        sync();
-    }
-
     string getCurrentBranch()
     {
         auto cmdResult = Action::exec(git_command[CURRENT_BRANCH]);
@@ -348,11 +326,6 @@ public:
     {
         Action::exec(Action::updateString(git_command[CHECK_REMOTE_BRANCH], branch));
         return false;
-    }
-
-    void stopSync()
-    {
-        _continueSync = false;
     }
 
     void stage(vector<string> files)
@@ -375,9 +348,36 @@ private:
     vector<string> excludedFiles;
     string previousBranch;
     int commitCount = 0;
+    FileWatch watcher{directoryPath, 500, [this](vector<string> paths)
+                      {
+                          this->saveDetected(paths);
+                      }};
     string sessionBranchPrefix = "__gpis_";
     string commitPrefix = "Session changes count: ";
+    int pullDelayInMS = 1000, fileCheckDelayInMS = 300;
     GitHandler git = GitHandler();
+
+    void watch()
+    {
+        int hcf = Action::getHcf(pullDelayInMS, fileCheckDelayInMS);
+        int countPull = 0, countFileWatch = 0, maxCountPull = pullDelayInMS / hcf, maxCountFileWatch = fileCheckDelayInMS / hcf;
+
+        while (true)
+        {
+            if (countPull == 0)
+            {
+                git.pull();
+            }
+            if (countFileWatch == 0)
+            {
+                watcher.check();
+            }
+            countPull = (countPull + 1) % maxCountPull;
+            countFileWatch = (countFileWatch + 1) % maxCountFileWatch;
+
+            this_thread::sleep_for(chrono::milliseconds(hcf));
+        }
+    }
 
 public:
     Session()
@@ -412,6 +412,7 @@ public:
 
     void saveDetected(std::vector<std::string> paths)
     {
+        cout << "Change detected";
         auto gitChangedFiles = Action::getUniueString(git.getFileWithChanges(), excludedFiles);
         stringstream commitMessage;
         git.stage(gitChangedFiles);
@@ -426,18 +427,15 @@ public:
         {
             return;
         }
-        string path = "./";
-        FileWatch watcher{path, 500, [this](vector<string> paths)
-                          {
-                              this->saveDetected(paths);
-                          }};
         if (branch.find(sessionBranchPrefix, 0) != 0)
         {
             branch = sessionBranchPrefix + branch;
         }
         git.checkout(branch);
-        git.startSync();
-        watcher.start();
+        this->watch();
+        // thread thread2([this](){ watcher.start(); });
+        // git.startSync();
+        // watcher.check();
     }
 
     void checkForChanges()
