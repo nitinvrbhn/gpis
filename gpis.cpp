@@ -47,6 +47,8 @@ enum GitChangeType
     UN_TRACKED
 };
 
+const string all_character_string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
 // GIT commands map
 static unordered_map<GitCommandHead, string> git_command = {
     {GET_UNSTAGED_FILES, "git diff --name-only"},
@@ -60,7 +62,7 @@ static unordered_map<GitCommandHead, string> git_command = {
     {PUSH, "git push"},
     {PULL, "git pull"},
     {CURRENT_BRANCH, "git branch --show-current"},
-    {CHECK_REMOTE_BRANCH, "git ls-remote --exit-code --heads origin %s"}};
+    {CHECK_REMOTE_BRANCH, "git ls-remote --heads origin %s"}};
 
 static unordered_map<string, string> error_messages = {
     {"INSUFFICIENT_PARAMETER", "Insufficient parameters provided"},
@@ -173,7 +175,7 @@ public:
 
     static string getRandomString(size_t length = 5)
     {
-        const string characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        const string characters = all_character_string;
         random_device rd;
         mt19937 gen(rd());
         uniform_int_distribution<> dis(0, characters.size() - 1);
@@ -399,8 +401,8 @@ public:
             cout << (newBranch.size()) << endl;
             newBranch = (sessionBranchPrefix + Action::getRandomString());
         }
-        // git.switchToNewBranch(newBranch);
-        // join(newBranch);
+        git.switchToNewBranch(newBranch);
+        join(newBranch);
     }
 
     bool isBranchNameValid(string branchName)
