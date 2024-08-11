@@ -136,7 +136,7 @@ public:
         {
             value1 = value1 + value2;
             value2 = value1 - value2;
-            value1 = value1 = value2;
+            value1 = value1 - value2;
         }
         if (value1 == 0)
             return value2;
