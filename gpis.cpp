@@ -374,7 +374,6 @@ private:
             }
             countPull = (countPull + 1) % maxCountPull;
             countFileWatch = (countFileWatch + 1) % maxCountFileWatch;
-
             this_thread::sleep_for(chrono::milliseconds(hcf));
         }
     }
@@ -412,8 +411,9 @@ public:
 
     void saveDetected(std::vector<std::string> paths)
     {
-        cout << "Change detected";
         auto gitChangedFiles = Action::getUniueString(git.getFileWithChanges(), excludedFiles);
+        if (gitChangedFiles.size() == 0)
+            return;
         stringstream commitMessage;
         git.stage(gitChangedFiles);
         commitMessage << commitPrefix << ++commitCount;
