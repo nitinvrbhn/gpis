@@ -14,7 +14,6 @@
 #include <thread>
 #include <chrono>
 #include <random>
-// #include <QFileSystemWatcher>
 
 using namespace std;
 /**
@@ -78,7 +77,6 @@ public:
     // Executes terminal command and return output string
     static std::string exec(string cmd, bool isReversed = false)
     {
-        cout << cmd << endl;
         std::array<char, 128> buffer;
         std::string result;
         std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.c_str(), "r"), pclose);
@@ -201,6 +199,14 @@ public:
         }
         return randomString;
     }
+
+    static bool checkForGitFiles(string path) {
+        string gitFolderSeparator = "/.git",
+            gitFileSeparator = "/.git/";
+        bool isFilePresent = path.find(gitFileSeparator, 0) != std::string::npos,
+            isFolderPresent = path.find(gitFolderSeparator) == (path.length() - gitFolderSeparator.length());
+        return isFilePresent || isFolderPresent;
+    }
 };
 
 class FileWatch
@@ -218,6 +224,9 @@ private:
     {
         for (const auto &file : filesystem::recursive_directory_iterator(path))
         {
+            if(Action::checkForGitFiles(file.path())) {
+                continue;
+            }
             existingFileMap[file.path()] = filesystem::last_write_time(file);
         }
     }
@@ -245,6 +254,9 @@ public:
         }
         for (const auto &file : filesystem::recursive_directory_iterator(_folderPath))
         {
+            if(Action::checkForGitFiles(file.path())) {
+                continue;
+            }
             filesystem::file_time_type lastUpdateTime = filesystem::last_write_time(file);
             if (!pathExists(file.path()))
             {
@@ -390,7 +402,7 @@ public:
         excludedFiles = git.getFileWithChanges();
     }
 
-    void start()
+    void init()
     {
         string newBranch = "";
         previousBranch = git.getCurrentBranch();
@@ -402,6 +414,11 @@ public:
         }
         git.switchToNewBranch(newBranch);
         join(newBranch);
+    }
+
+    void start()
+    {
+        this->watch();
     }
 
     bool isBranchNameValid(string branchName)
@@ -458,6 +475,10 @@ int main(int argc, char **argv)
         if (cmd == "start")
         {
             session.start();
+        }
+        else if (cmd == "init")
+        {
+            session.init();
         }
         else if (cmd == "join" && argc == 3 && session.isBranchNameValid(argv[2]))
         {
