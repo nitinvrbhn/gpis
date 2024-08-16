@@ -11,6 +11,6 @@ To start the sync - Checkout the desired branch and hit `gpis start`.
 
 ## Installation
 To install, 
-- Copy the `gpis` file to your desired location.
+- Copy the [`gpis`](https://github.com/nitinvrbhn/gpis/blob/main/gpis) file to your desired location.
 - Add that location in your PATH variable
 - That's it
