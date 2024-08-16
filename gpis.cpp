@@ -49,7 +49,7 @@ enum GitChangeType
 const string directoryPath = "./";
 const string all_character_string = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-// GIT commands map
+// GIT commands map for further use in program
 static unordered_map<GitCommandHead, string> git_command = {
     {GET_UNSTAGED_FILES, "git diff --name-only"},
     {GET_STAGED_FILES, "git diff --name-only --staged"},
